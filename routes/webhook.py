@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
 from config import VERIFY_TOKEN
-from services.flow import handle_button
+from services.flow import handle_button, handle_text
 
 router = APIRouter()
 
@@ -10,12 +10,11 @@ router = APIRouter()
 async def verify(request: Request):
     params = request.query_params
 
-    mode = params.get("hub.mode")
-    challenge = params.get("hub.challenge")
-    token = params.get("hub.verify_token")
-
-    if mode == "subscribe" and token == VERIFY_TOKEN:
-        return PlainTextResponse(challenge)
+    if (
+        params.get("hub.mode") == "subscribe"
+        and params.get("hub.verify_token") == VERIFY_TOKEN
+    ):
+        return PlainTextResponse(params.get("hub.challenge"))
 
     return {"error": "verification failed"}
 
@@ -28,17 +27,13 @@ async def webhook(request: Request):
         msg = data["entry"][0]["changes"][0]["value"]["messages"][0]
         user = msg["from"]
 
-        # ✅ texto → menú automático
         if msg["type"] == "text":
-            await handle_button(user, "menu")
+            text = msg["text"]["body"]
+            await handle_text(user, text)
 
-        # ✅ botones
         elif msg["type"] == "interactive":
-            btn_id = msg["interactive"]["button_reply"]["id"]
-            await handle_button(user, btn_id)
-
-        else:
-            await handle_button(user, "menu")
+            button_id = msg["interactive"]["button_reply"]["id"]
+            await handle_button(user, button_id)
 
     except Exception as e:
         print("ERROR:", e)

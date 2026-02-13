@@ -1,217 +1,186 @@
-from services.whatsapp_service import send_buttons
-from services.weather_service import get_weather
-from services.user_service import get_or_create_user, set_language
+from services.whatsapp_service import send_buttons, send_text
+from services.service_search import search_service
+from services.translations.i18n import t
+from database.db import SessionLocal
+from database.models.user import User
+from services.service_search import get_categories
+from services.intent import detect_intent
+from database.models.service import Service
 
 
-async def handle_button(user: str, btn_id: str):
+# =========================
+# UTIL
+# =========================
 
-    user_data = get_or_create_user(user)
-    lang = user_data["language"]
+def get_user(phone: str):
+    db = SessionLocal()
+    user = db.query(User).filter_by(phone=phone).first()
 
+    if not user:
+        user = User(phone=phone, language="es")
+        db.add(user)
+        db.commit()
+        db.refresh(user)
 
-    is_en = lang == "en"
-    back = "⬅️ Back" if is_en else "⬅️ Volver"
-
-
-    # =================================================
-    # MENÚ PRINCIPAL
-    # =================================================
-    if btn_id == "menu":
-
-        text = (
-            "👋 Hi! I'm *Barnebot*, Lo Barnechea virtual assistant.\nUse the buttons below."
-            if is_en
-            else
-            "👋 ¡Hola! Soy *Barnebot*, asistente virtual de Lo Barnechea.\nUsa los botones para continuar."
-        )
-
-        await send_buttons(user, text, [
-            {"type": "reply", "reply": {"id": "horarios", "title": "🕐 Schedule" if is_en else "🕐 Horarios"}},
-            {"type": "reply", "reply": {"id": "ubicaciones", "title": "📍 Locations" if is_en else "📍 Ubicaciones"}},
-            {"type": "reply", "reply": {"id": "mas", "title": "➕ More" if is_en else "➕ Más"}},
-        ])
+    return user, db
 
 
-    # =================================================
-    # HORARIOS
-    # =================================================
-    elif btn_id == "horarios":
 
-        text = (
-            "🕐 Opening hours:\nMon–Fri 8:30–14:00"
-            if is_en
-            else
-            "🕐 Atención municipal:\nLun–Vie 8:30–14:00"
-        )
-
-        await send_buttons(user, text, [
-            {"type": "reply", "reply": {"id": "menu", "title": back}}
-        ])
+# =========================
+# MENÚ PRINCIPAL
+# =========================
 
 
-    # =================================================
-    # UBICACIONES
-    # =================================================
-    elif btn_id == "ubicaciones":
+async def send_main_menu(user):
 
-        text = (
-            "📍 City Hall location:\nhttps://maps.google.com/?q=municipalidad"
-            if is_en
-            else
-            "📍 Municipalidad:\nhttps://maps.google.com/?q=municipalidad"
-        )
+    categories = get_categories()
+    buttons = [
+        {"id": f"cat_{c}", "title": c.capitalize()}
+        for c in categories
+    ]
 
-        await send_buttons(user, text, [
-            {"type": "reply", "reply": {"id": "menu", "title": back}}
-        ])
+    await send_buttons(
+        user.phone,
+        "¿En qué te ayudo?",
+        buttons
+    )
+
+    await send_buttons(
+        user.phone,
+        t("menu.welcome", user.language),
+        [
+            {"id": "tramites", "title": t("menu.tramites", user.language)},
+            {"id": "pagos", "title": t("menu.pagos", user.language)},
+            {"id": "beneficios", "title": t("menu.beneficios", user.language)},
+            {"id": "eventos", "title": t("menu.eventos", user.language)},
+            {"id": "language", "title": t("menu.language", user.language)},
+        ]
+    )
 
 
-    # =================================================
-    # SUBMENÚ MÁS
-    # =================================================
-    elif btn_id == "mas":
+# =========================
+# BOTONES
+# =========================
 
+
+
+async def handle_button(phone: str, button_id: str):
+    
+    user, db = get_user(phone)
+
+    
+    if button_id == "menu":
+        await send_main_menu(user)
+
+    elif button_id.startswith("cat_"):
+        category = button_id.replace("cat_", "")
+        await send_category_services(user, category)
+
+    elif button_id == "tramites":
+        await send_text(user.phone, t("ask.tramite", user.language))
+
+    elif button_id == "pagos":
+        await send_text(user.phone, t("ask.pagos", user.language))
+
+    elif button_id == "beneficios":
+        await send_text(user.phone, t("ask.beneficios", user.language))
+
+    elif button_id == "eventos":
+        await send_text(user.phone, t("ask.eventos", user.language))
+
+    elif button_id == "language":
         await send_buttons(
-            user,
-            "More options:" if is_en else "Más opciones:",
+            user.phone,
+            t("lang.select", user.language),
             [
-                {"type": "reply", "reply": {"id": "clima", "title": "🌤 Weather" if is_en else "🌤 Clima"}},
-                {"type": "reply", "reply": {"id": "idioma", "title": "🌎 Language" if is_en else "🌎 Idioma"}},
-                {"type": "reply", "reply": {"id": "faq", "title": "❓ FAQ"}},
+                {"id": "lang_es", "title": t("lang.es", user.language)},
+                {"id": "lang_en", "title": t("lang.en", user.language)},
             ]
         )
 
+    elif button_id == "lang_es":
+        user.language = "es"
+        db.commit()
+        await send_text(user.phone, t("lang.changed", "es"))
+        await send_main_menu(user)
 
-    # =================================================
-    # CLIMA
-    # =================================================
-    elif btn_id == "clima":
+    elif button_id == "lang_en":
+        user.language = "en"
+        db.commit()
+        await send_text(user.phone, t("lang.changed", "en"))
+        await send_main_menu(user)
 
-        weather = get_weather()
-
-        text = (
-            f"🌤 Weather:\n{weather}"
-            if is_en
-            else
-            f"🌤 Clima actual:\n{weather}"
-        )
-
-        await send_buttons(user, text, [
-            {"type": "reply", "reply": {"id": "mas", "title": back}}
-        ])
+    db.close()
 
 
-    # =================================================
-    # IDIOMA
-    # =================================================
-    elif btn_id == "idioma":
+# =========================
+# TEXTO LIBRE
+# =========================
 
+async def handle_text(phone: str, text: str):
+
+    user, db = get_user(phone)
+
+    service = search_service(text)
+
+    if service:
         await send_buttons(
-            user,
-            "🌎 Select language / Selecciona idioma",
+            user.phone,
+            f"📌 {service.name}\n{service.description}",
             [
-                {"type": "reply", "reply": {"id": "lang_es", "title": "🇪🇸 Español"}},
-                {"type": "reply", "reply": {"id": "lang_en", "title": "🇺🇸 English"}},
+                {
+                    "type": "url",
+                    "title": "Abrir trámite",
+                    "url": service.url
+                }
             ]
         )
+    else:
+        await send_text(user.phone, t("not_found", user.language))
+        await send_main_menu(user)
 
-    elif btn_id == "lang_es":
-        set_language(user, "es")
-        await handle_button(user, "menu")
-
-    elif btn_id == "lang_en":
-        set_language(user, "en")
-        await handle_button(user, "menu")
+    db.close()
 
 
-        # =================================================
-    # FAQ
-    # =================================================
-    elif btn_id == "faq":
+def handle_text(user, message):
+    intent = detect_intent(message)
 
-        is_en = lang == "en"
+    if intent:
+        service = get_service_by_key(intent)
+        return send_service(service)
 
-        text = "Frequently asked questions:" if is_en else "Preguntas frecuentes:"
+    return send_menu()
 
-        await send_buttons(
-            user,
-            text,
-            [
-                {"type": "reply", "reply": {"id": "faq_pagos", "title": "💳 Payments" if is_en else "💳 Pagos"}},
-                {"type": "reply", "reply": {"id": "faq_permisos", "title": "📄 Permits" if is_en else "📄 Permisos"}},
-                {"type": "reply", "reply": {"id": "faq_servicios", "title": "🏛 Services" if is_en else "🏛 Servicios"}},
-            ]
+def handle_text(user, message, db):
+
+    # 🔹 detectar intención
+    service_key = detect_intent(message)
+
+    if service_key:
+        service = (
+            db.query(Service)
+            .filter(Service.key == service_key)
+            .first()
         )
 
+        if service:
+            return {
+                "text": service.description,
+                "buttons": [
+                    {
+                        "type": "url",
+                        "title": "Ir al trámite",
+                        "url": service.url
+                    }
+                ]
+            }
 
-    # =================================================
-    # FAQ PAG 2
-    # =================================================
-    elif btn_id == "faq_servicios":
-
-        is_en = lang == "en"
-
-        await send_buttons(
-            user,
-            "More topics:" if is_en else "Más temas:",
-            [
-                {"type": "reply", "reply": {"id": "faq_basura", "title": "🗑 Garbage" if is_en else "🗑 Basura"}},
-                {"type": "reply", "reply": {"id": "faq_contacto", "title": "📞 Contact" if is_en else "📞 Contacto"}},
-                {"type": "reply", "reply": {"id": "faq_volver", "title": "⬅️ Back" if is_en else "⬅️ Volver"}},
-            ]
-        )
-
-
-    elif btn_id == "faq_volver":
-        await handle_button(user, "faq")
-
-
-    # =================================================
-    # RESPUESTAS
-    # =================================================
-    elif btn_id == "faq_pagos":
-
-        text = (
-            "💳 You can pay online at:\nhttps://lobarnechea.cl/pagos"
-            if lang == "en"
-            else
-            "💳 Puedes pagar en línea en:\nhttps://lobarnechea.cl/pagos"
-        )
-
-        await send_buttons(user, text, [{"type": "reply", "reply": {"id": "faq", "title": back}}])
-
-
-    elif btn_id == "faq_permisos":
-
-        text = (
-            "📄 Permits are requested at the Urban Planning Office (DOM)."
-            if lang == "en"
-            else
-            "📄 Los permisos se solicitan en la Dirección de Obras Municipales (DOM)."
-        )
-
-        await send_buttons(user, text, [{"type": "reply", "reply": {"id": "faq", "title": back}}])
-
-
-    elif btn_id == "faq_basura":
-
-        text = (
-            "🗑 Garbage collection: Mon, Wed and Fri mornings."
-            if lang == "en"
-            else
-            "🗑 Recolección: lunes, miércoles y viernes en la mañana."
-        )
-
-        await send_buttons(user, text, [{"type": "reply", "reply": {"id": "faq_servicios", "title": back}}])
-
-
-    elif btn_id == "faq_contacto":
-
-        text = (
-            "📞 Phone: +56 2 2757 6000\n✉️ contacto@lobarnechea.cl"
-            if lang == "en"
-            else
-            "📞 Teléfono: +56 2 2757 6000\n✉️ contacto@lobarnechea.cl"
-        )
-
-        await send_buttons(user, text, [{"type": "reply", "reply": {"id": "faq_servicios", "title": back}}])
+    # 🔹 fallback menú
+    return {
+        "text": "Elige una opción 👇",
+        "buttons": [
+            {"type": "reply", "title": "Permiso circulación", "id": "permiso_circulacion"},
+            {"type": "reply", "title": "Licencia conducir", "id": "licencia_conducir"},
+            {"type": "reply", "title": "Multas", "id": "pago_multas"},
+        ]
+    }
