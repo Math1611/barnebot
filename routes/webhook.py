@@ -2,6 +2,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
 from config import VERIFY_TOKEN
 from services.flow import handle_button, handle_text
+from database import db
+
 
 router = APIRouter()
 
@@ -29,7 +31,7 @@ async def webhook(request: Request):
 
         if msg["type"] == "text":
             text = msg["text"]["body"]
-            await handle_text(user, text)
+            await handle_text(user, text,db)
 
         elif msg["type"] == "interactive":
             button_id = msg["interactive"]["button_reply"]["id"]
