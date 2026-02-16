@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request
-from services.flow import handle_button, handle_text
+from services.flow import handle_text, handle_button
 
 router = APIRouter()
 
@@ -9,18 +9,26 @@ async def webhook(request: Request):
 
     data = await request.json()
 
-    message = data["message"]
+    try:
+        value = data["entry"][0]["changes"][0]["value"]
 
-    phone = message["from"]
+        if "messages" not in value:
+            return {"status": "no messages"}
 
-    # texto
-    if message["type"] == "text":
-        text = message["text"]["body"]
-        await handle_text(phone, text)
+        message = value["messages"][0]
+        phone = message["from"]
 
-    # botón
-    elif message["type"] == "button":
-        button_id = message["button"]["payload"]
-        await handle_button(phone, button_id)
+        if message["type"] == "text":
+            text = message["text"]["body"]
+            await handle_text(phone, text)
 
-    return {"status": "ok"}
+
+        elif message["type"] == "interactive":
+            button_id = message["interactive"]["button_reply"]["id"]
+            await handle_button(phone, button_id)
+
+        return {"status": "ok"}
+
+    except Exception as e:
+        print("🔥 ERROR WEBHOOK:", e)
+        return {"status": "error"}
