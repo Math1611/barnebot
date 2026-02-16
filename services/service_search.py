@@ -1,7 +1,7 @@
 from database.db import SessionLocal
-from database.models.service import Service
+from models.service import Service
 from database.db import SessionLocal
-from database.models.service import Service
+from models.service import Service
 from sqlalchemy import distinct
 
 def get_categories():

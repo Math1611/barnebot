@@ -1,12 +1,12 @@
 import requests
-from config import TOKEN, PHONE_ID
+from config import WA_TOKEN, PHONE_NUMBER_ID
 
-BASE_URL = f"https://graph.facebook.com/v19.0/{PHONE_ID}/messages"
+BASE_URL = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
 
 
 def send_payload(payload):
     headers = {
-        "Authorization": f"Bearer {TOKEN}",
+        "Authorization": f"Bearer {WA_TOKEN}",
         "Content-Type": "application/json"
     }
     requests.post(BASE_URL, headers=headers, json=payload)

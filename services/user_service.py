@@ -1,15 +1,15 @@
 from database.db import SessionLocal
-from database.models import User
+from models import user
 
 
 def get_or_create_user(phone: str):
 
     db = SessionLocal()
 
-    user = db.query(User).filter(User.phone == phone).first()
+    user = db.query(user).filter(user.phone == phone).first()
 
     if not user:
-        user = User(phone=phone, language="es")
+        user = user(phone=phone, language="es")
         db.add(user)
         db.commit()
         db.refresh(user)
@@ -28,7 +28,7 @@ def set_language(phone: str, lang: str):
 
     db = SessionLocal()
 
-    user = db.query(User).filter(User.phone == phone).first()
+    user = db.query(user).filter(user.phone == phone).first()
 
     if user:
         user.language = lang

@@ -4,8 +4,8 @@ from services.translations.i18n import t
 from services.intent import detect_intent
 
 from database.db import SessionLocal
-from database.models.user import User
-from database.models.service import Service
+from models.user import User
+from models.service import Service
 
 
 # =========================
@@ -121,8 +121,14 @@ async def handle_text(phone: str, text: str):
     user, db = get_user(phone)
 
     try:
+        text_lower = text.lower()
 
-        # 🔹 detectar intención con IA/reglas
+        # 🔹 detectar saludo
+        if text_lower in ["hola", "buenas", "hi", "hello"]:
+            await send_main_menu(user)
+            return
+
+        # 🔹 detectar intención
         service_key = detect_intent(text)
 
         if service_key:
