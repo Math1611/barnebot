@@ -1,4 +1,7 @@
 from fastapi import APIRouter, Request
+from sqlalchemy.orm import Session
+from database import SessionLocal
+from models.message import Message
 import requests
 import os
 
@@ -6,8 +9,8 @@ router = APIRouter()
 
 @router.post("/webhook")
 async def webhook(request: Request):
-    body = await request.body()
 
+    body = await request.body()
     if not body:
         return {"status": "empty body"}
 
@@ -18,10 +21,20 @@ async def webhook(request: Request):
         numero = message["from"]
         texto = message["text"]["body"]
 
-        print("Número:", numero)
-        print("Mensaje:", texto)
+        db: Session = SessionLocal()
 
-        # 🔹 Enviar respuesta
+        # 🔹 Guardar mensaje entrante
+        incoming = Message(
+            phone_number=numero,
+            text=texto,
+            direction="incoming"
+        )
+        db.add(incoming)
+        db.commit()
+
+        # 🔹 Preparar respuesta
+        respuesta_texto = f"Recibí tu mensaje: {texto} 🚀"
+
         token = os.getenv("WA_TOKEN")
         phone_number_id = os.getenv("PHONE_NUMBER_ID")
 
@@ -36,14 +49,24 @@ async def webhook(request: Request):
             "messaging_product": "whatsapp",
             "to": numero,
             "type": "text",
-            "text": {"body": f"Recibí tu mensaje: {texto} 🚀"}
+            "text": {"body": respuesta_texto}
         }
 
-        response = requests.post(url, headers=headers, json=payload)
-        print("Respuesta de Meta:", response.text)
+        requests.post(url, headers=headers, json=payload)
+
+        # 🔹 Guardar mensaje saliente
+        outgoing = Message(
+            phone_number=numero,
+            text=respuesta_texto,
+            direction="outgoing"
+        )
+        db.add(outgoing)
+        db.commit()
+
+        db.close()
 
     except Exception as e:
-        print("No es un mensaje válido:", e)
-        return {"status": "not a message event"}
+        print("Error:", e)
+        return {"status": "error"}
 
     return {"status": "ok"}
