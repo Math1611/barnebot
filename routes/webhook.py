@@ -22,7 +22,7 @@ async def webhook(request: Request):
         print("Mensaje:", texto)
 
         # 🔹 Enviar respuesta
-        token = os.getenv("WHATSAPP_TOKEN")
+        token = os.getenv("WA_TOKEN")
         phone_number_id = os.getenv("PHONE_NUMBER_ID")
 
         url = f"https://graph.facebook.com/v18.0/{phone_number_id}/messages"
