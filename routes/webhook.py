@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
 from sqlalchemy.orm import Session
-from database import SessionLocal
+from database.db import SessionLocal
 from models.message import Message
 import requests
 import os
