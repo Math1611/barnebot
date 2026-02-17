@@ -1,12 +1,12 @@
-from fastapi import Request
+from fastapi import APIRouter, Request
 
-@app.post("/webhook")
+router = APIRouter()
+
+@router.post("/webhook")
 async def webhook(request: Request):
     try:
         data = await request.json()
     except:
         data = {}
-
-    print("DATA RECIBIDA:", data)
 
     return {"status": "ok"}
