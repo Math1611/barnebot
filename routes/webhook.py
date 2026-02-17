@@ -4,9 +4,7 @@ router = APIRouter()
 
 @router.post("/webhook")
 async def webhook(request: Request):
-    try:
-        data = await request.json()
-    except:
-        data = {}
+    data = await request.json()
+    print("DATA RECIBIDA:", data)
 
     return {"status": "ok"}
