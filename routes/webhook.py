@@ -7,10 +7,20 @@ async def webhook(request: Request):
     body = await request.body()
 
     if not body:
-        print("POST sin body")
         return {"status": "empty body"}
 
     data = await request.json()
-    print("DATA RECIBIDA:", data)
+
+    try:
+        message = data["entry"][0]["changes"][0]["value"]["messages"][0]
+        numero = message["from"]
+        texto = message["text"]["body"]
+
+        print("Número:", numero)
+        print("Mensaje:", texto)
+
+    except Exception as e:
+        print("No es un mensaje:", e)
+        return {"status": "not a message event"}
 
     return {"status": "ok"}
