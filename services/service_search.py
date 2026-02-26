@@ -19,7 +19,8 @@ def search_service(text: str):
     services = db.query(Service).all()
 
     for s in services:
-        if any(word in text for word in s.keywords.split(",")):
+        keywords = [k.strip() for k in s.keywords.split(",")]
+    if any(word in text for word in keywords):
             return s
 
     return None
@@ -29,3 +30,4 @@ def get_services_by_category(category):
     items = db.query(Service).filter(Service.category == category).all()
     db.close()
     return items
+

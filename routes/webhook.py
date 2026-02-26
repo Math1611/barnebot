@@ -1,72 +1,61 @@
 from fastapi import APIRouter, Request
-from sqlalchemy.orm import Session
 from database.db import SessionLocal
-from models.message import Message
-import requests
-import os
+from services.flow import handle_user_message
+import os 
 
 router = APIRouter()
 
 @router.post("/webhook")
 async def webhook(request: Request):
-
-    body = await request.body()
-    if not body:
-        return {"status": "empty body"}
-
-    data = await request.json()
+    body = await request.json()
 
     try:
-        message = data["entry"][0]["changes"][0]["value"]["messages"][0]
-        numero = message["from"]
-        texto = message["text"]["body"]
+        # 1. Validación de seguridad: Verificar que sea un mensaje de usuario
+        # Esto evita el error 'messages' al ignorar notificaciones de entrega/lectura
+        entries = body.get("entry", [])
+        if not entries:
+            return {"status": "no entry"}
 
-        db: Session = SessionLocal()
+        changes = entries[0].get("changes", [])
+        if not changes:
+            return {"status": "no changes"}
 
-        # 🔹 Guardar mensaje entrante
-        incoming = Message(
-            phone_number=numero,
-            text=texto,
-            direction="incoming"
-        )
-        db.add(incoming)
-        db.commit()
+        value = changes[0].get("value", [])
+        if "messages" not in value:
+            # Si no hay 'messages', es una notificación de sistema (read, delivered, etc.)
+            return {"status": "notification ignored"}
 
-        # 🔹 Preparar respuesta
-        respuesta_texto = f"Recibí tu mensaje: {texto} 🚀"
+        # 2. Extraer datos con seguridad
+        message_data = value["messages"][0]
+        phone = message_data.get("from")
+        
+        # Usamos tu función get_message_text para manejar botones e interactivos
+        text = get_message_text(message_data)
 
-        token = os.getenv("WA_TOKEN")
-        phone_number_id = os.getenv("PHONE_NUMBER_ID")
+        if text == "mensaje_no_identificado":
+            return {"status": "unidentified message type"}
 
-        url = f"https://graph.facebook.com/v18.0/{phone_number_id}/messages"
-
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
-        }
-
-        payload = {
-            "messaging_product": "whatsapp",
-            "to": numero,
-            "type": "text",
-            "text": {"body": respuesta_texto}
-        }
-
-        requests.post(url, headers=headers, json=payload)
-
-        # 🔹 Guardar mensaje saliente
-        outgoing = Message(
-            phone_number=numero,
-            text=respuesta_texto,
-            direction="outgoing"
-        )
-        db.add(outgoing)
-        db.commit()
-
-        db.close()
+        db = SessionLocal()
+        try:
+            # 3. Procesar el mensaje
+            await handle_user_message(db, phone, text)
+        finally:
+            db.close()
 
     except Exception as e:
-        print("Error:", e)
-        return {"status": "error"}
+        # Imprime el error exacto para depuración
+        print(f"❌ Error en webhook: {type(e).__name__} - {e}")
 
     return {"status": "ok"}
+
+def get_message_text(message: dict) -> str:
+    """Extrae el texto sin importar si es mensaje directo o respuesta a botón."""
+    if "text" in message:
+        return message["text"]["body"]
+    if "interactive" in message:
+        interactive = message["interactive"]
+        if "button_reply" in interactive:
+            return interactive["button_reply"]["title"] # Usar title para el RAG
+        if "list_reply" in interactive:
+            return interactive["list_reply"]["title"]
+    return "mensaje_no_identificado"

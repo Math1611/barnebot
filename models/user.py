@@ -1,9 +1,13 @@
 from sqlalchemy import Column, Integer, String
 from database.db import Base
 
+
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
     phone = Column(String, unique=True, index=True)
     language = Column(String, default="es")
+
+    state = Column(String, default="main_menu")
+    last_intent = Column(String, nullable=True)

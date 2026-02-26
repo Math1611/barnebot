@@ -46,3 +46,19 @@ def get_weather():
     CACHE["expires"] = now + CACHE_TTL
 
     return weather
+
+def get_weather():
+    """
+    Obtiene la temperatura actual en tiempo real en la comuna de Lo Barnechea.
+    Útil para informar sobre condiciones climáticas, nieve o frío.
+    """
+    now = time.time()
+    if CACHE["data"] and now < CACHE["expires"]:
+        return CACHE["data"]
+
+    weather_val = fetch_weather() # Tu función que retorna "X°C"
+    full_info = f"La temperatura actual en Lo Barnechea es de {weather_val}."
+    
+    CACHE["data"] = full_info
+    CACHE["expires"] = now + CACHE_TTL
+    return full_info

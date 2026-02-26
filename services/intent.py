@@ -1,5 +1,13 @@
 from typing import Optional
 
+HELP_KEYWORDS = ["ayuda", "ayúdame", "help", "no entiendo", "que puedo hacer"]
+
+def detect_intent(text: str):
+    text = text.lower().strip()
+
+    if any(k in text for k in HELP_KEYWORDS):
+        return "HELP"
+
 INTENT_MAP = {
     # 🚗 Permiso circulación
     "permiso": "permiso_circulacion",
@@ -59,3 +67,8 @@ def detect_intent(text: str) -> Optional[str]:
             return service_key
 
     return None
+
+def is_municipal_query(text: str) -> bool:
+    # Puedes usar palabras clave o una llamada rápida a Gemini
+    # Pero para producción, un umbral de score en el vector_service es más seguro.
+    pass

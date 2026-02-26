@@ -1,164 +1,168 @@
-from services.whatsapp_service import send_buttons, send_text
-from services.service_search import get_categories
-from services.translations.i18n import t
-from services.intent import detect_intent
-
 from database.db import SessionLocal
 from models.user import User
-from models.service import Service
+from models.message import Message
+from services.whatsapp import send_whatsapp_message
+from services.menus import (
+    main_menu,
+    tramites_menu,
+    transito_tramites_menu,
+    licencias_menu,
+    info_licencia_primera_vez,
+    info_renovacion_licencia,
+    pagos_online
+)
+
+import unicodedata
+import re
+from services.rag_service import RAGService # Importamos el servicio centralizado
+from services.vector_service import search_vector_database
+
+# Instanciamos el servicio RAG una sola vez
+rag_handler = RAGService()
+
+# ==============================
+# KEYWORDS
+# ==============================
+
+HELP_KEYWORDS = ["ayuda", "ayudame", "help", "no entiendo"]
+GREETING_KEYWORDS = ["hola", "buenas", "hi", "hello"]
+MENU_KEYWORDS = ["menu", "inicio"]
+
+# ======================================================
+# ENTRYPOINT PRINCIPAL
+# ======================================================
+
+async def handle_user_message(db, phone: str, text: str):
+    raw_text = text.strip()
+    normalized_text = normalize_text(raw_text)
+
+    user = get_or_create_user(db, phone)
+
+    # 1. ATAJOS GLOBALES (Saludos y Menú)
+    if is_menu_request(normalized_text):
+        return await respond_with_menu(db, phone, user)
+
+    if is_help_request(normalized_text):
+        return await send_and_store(
+            db,
+            phone,
+            "🤝 Puedes navegar usando los números del menú.\nEscribe *menu* para volver al inicio."
+        )
+
+    # 2. MÁQUINA DE ESTADOS (Navegación por números)
+    state_handlers = {
+        "main_menu": handle_main_menu,
+        "tramites_menu": handle_tramites_menu,
+        "transito_menu": handle_transito_menu,
+        "licencias_menu": handle_licencias_menu,
+    }
+
+    handler = state_handlers.get(user.state)
+
+    # Si el mensaje es un número y estamos en un estado válido -> Navegar
+    if handler and raw_text.isdigit():
+        return await handler(db, user, phone, raw_text)
+
+    # 3. RAG MUNICIPAL (Buscador Inteligente para preguntas abiertas)
+    # Si no es un comando de menú ni un número, consultamos la base de datos del PDF
+    print(f"🔍 Buscando en PDF para: {raw_text}")
+    
+    ai_response = await rag_handler.process_query(db, raw_text)
+    
+    return await send_and_store(db, phone, ai_response)
 
 
-# =========================
-# USER / DB
-# =========================
+# ======================================================
+# STATE HANDLERS
+# ======================================================
 
-def get_user(phone: str):
-    db = SessionLocal()
+async def handle_main_menu(db, user, phone, text):
+    options = {
+        "1": ("tramites_menu", tramites_menu),
+        "2": ("pagos_menu", pagos_online),
+    }
+    return await process_options(db, user, phone, text, options, main_menu)
 
+async def handle_tramites_menu(db, user, phone, text):
+    options = {
+        "1": ("transito_menu", transito_tramites_menu),
+        "0": ("main_menu", main_menu),
+    }
+    return await process_options(db, user, phone, text, options, tramites_menu)
+
+async def handle_transito_menu(db, user, phone, text):
+    options = {
+        "1": ("licencias_menu", licencias_menu),
+        "0": ("tramites_menu", tramites_menu),
+    }
+    return await process_options(db, user, phone, text, options, transito_tramites_menu)
+
+async def handle_licencias_menu(db, user, phone, text):
+    options = {
+        "1": ("licencias_menu", info_licencia_primera_vez),
+        "2": ("licencias_menu", info_renovacion_licencia),
+        "0": ("transito_menu", transito_tramites_menu),
+    }
+    return await process_options(db, user, phone, text, options, licencias_menu)
+
+# ======================================================
+# CORE OPTION PROCESSOR
+# ======================================================
+
+async def process_options(db, user, phone, text, options, default_menu_func):
+    if text in options:
+        new_state, menu_func = options[text]
+        user.state = new_state
+        db.commit()
+        return await send_and_store(db, phone, menu_func())
+
+    # Si presiona un número que no está en las opciones, re-enviar menú actual
+    return await send_and_store(db, phone, default_menu_func())
+
+# ======================================================
+# RESPUESTAS Y ALMACENAMIENTO
+# ======================================================
+
+async def respond_with_menu(db, phone, user):
+    user.state = "main_menu"
+    db.commit()
+    return await send_and_store(db, phone, main_menu())
+
+async def send_and_store(db, phone, text):
+    # Enviar a WhatsApp
+    send_whatsapp_message(phone, text)
+
+    # Guardar en historial
+    new_msg = Message(
+        phone_number=phone,
+        text=text,
+        direction="outgoing"
+    )
+    db.add(new_msg)
+    db.commit()
+
+# ======================================================
+# HELPERS
+# ======================================================
+
+def get_or_create_user(db, phone):
     user = db.query(User).filter_by(phone=phone).first()
-
     if not user:
-        user = User(phone=phone, language="es")
+        user = User(phone=phone, language="es", state="main_menu")
         db.add(user)
         db.commit()
         db.refresh(user)
+    return user
 
-    return user, db
+def normalize_text(text):
+    text = text.lower()
+    text = unicodedata.normalize("NFD", text)
+    text = text.encode("ascii", "ignore").decode("utf-8")
+    text = re.sub(r"[^a-z0-9\s]", "", text)
+    return text
 
+def is_menu_request(text):
+    return text in GREETING_KEYWORDS or text in MENU_KEYWORDS
 
-# =========================
-# MENÚ PRINCIPAL
-# =========================
-
-async def send_main_menu(user):
-
-    categories = get_categories()
-
-    buttons = [
-        {"id": f"cat_{c}", "title": c.capitalize()}
-        for c in categories
-    ]
-
-    await send_buttons(
-        user.phone,
-        t("menu.welcome", user.language),
-        buttons + [
-            {"id": "language", "title": t("menu.language", user.language)}
-        ]
-    )
-
-
-# =========================
-# BOTONES
-# =========================
-
-async def handle_button(phone: str, button_id: str):
-
-    user, db = get_user(phone)
-
-    try:
-
-        if button_id == "menu":
-            await send_main_menu(user)
-
-        # 🔹 categorías dinámicas
-        elif button_id.startswith("cat_"):
-            category = button_id.replace("cat_", "")
-
-            services = (
-                db.query(Service)
-                .filter(Service.category == category)
-                .all()
-            )
-
-            buttons = [
-                {"type": "url", "title": s.name, "url": s.url}
-                for s in services
-            ]
-
-            await send_buttons(
-                user.phone,
-                f"📂 {category.capitalize()}",
-                buttons
-            )
-
-        # 🔹 idioma
-        elif button_id == "language":
-            await send_buttons(
-                user.phone,
-                t("lang.select", user.language),
-                [
-                    {"id": "lang_es", "title": "Español"},
-                    {"id": "lang_en", "title": "English"},
-                ]
-            )
-
-        elif button_id == "lang_es":
-            user.language = "es"
-            db.commit()
-            await send_text(user.phone, "Idioma cambiado a Español 🇪🇸")
-            await send_main_menu(user)
-
-        elif button_id == "lang_en":
-            user.language = "en"
-            db.commit()
-            await send_text(user.phone, "Language changed to English 🇺🇸")
-            await send_main_menu(user)
-
-        else:
-            await send_main_menu(user)
-
-    finally:
-        db.close()
-
-
-# =========================
-# TEXTO LIBRE + IA
-# =========================
-
-async def handle_text(phone: str, text: str):
-
-    user, db = get_user(phone)
-
-    try:
-        text_lower = text.lower()
-
-        # 🔹 detectar saludo
-        if text_lower in ["hola", "buenas", "hi", "hello"]:
-            await send_main_menu(user)
-            return
-
-        # 🔹 detectar intención
-        service_key = detect_intent(text)
-
-        if service_key:
-            service = (
-                db.query(Service)
-                .filter(Service.key == service_key)
-                .first()
-            )
-
-            if service:
-                await send_buttons(
-                    user.phone,
-                    f"📌 {service.name}\n{service.description}",
-                    [
-                        {
-                            "type": "url",
-                            "title": t("open_service", user.language),
-                            "url": service.url
-                        }
-                    ]
-                )
-                return
-
-        # 🔹 fallback
-        await send_text(
-            user.phone,
-            t("not_found", user.language)
-        )
-
-        await send_main_menu(user)
-
-    finally:
-        db.close()
+def is_help_request(text):
+    return any(kw in text for kw in HELP_KEYWORDS)

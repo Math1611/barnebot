@@ -1,38 +1,26 @@
 import requests
-from config import WA_TOKEN, PHONE_NUMBER_ID
+import os
 
-BASE_URL = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
+WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
+PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 
+def send_whatsapp_message(to, message):
+    url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
 
-def send_payload(payload):
     headers = {
-        "Authorization": f"Bearer {WA_TOKEN}",
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
     }
-    requests.post(BASE_URL, headers=headers, json=payload)
 
-
-def send_text(to, text):
-    send_payload({
+    payload = {
         "messaging_product": "whatsapp",
         "to": to,
         "type": "text",
-        "text": {"body": text}
-    })
-
-
-def send_buttons(to, text, buttons):
-    send_payload({
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "interactive",
-        "interactive": {
-            "type": "button",
-            "body": {"text": text},
-            "action": {
-                "buttons": [
-                    {"type": "reply", "reply": b} for b in buttons
-                ]
-            }
+        "text": {
+            "body": message
         }
-    })
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+
+    return response.json()
