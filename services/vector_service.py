@@ -2,13 +2,11 @@ from sentence_transformers import SentenceTransformer
 from sqlalchemy import text
 import os
 
-# 1. Cargamos el modelo (se hace una sola vez al iniciar)
 model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
 
 def generate_embedding(text_input: str):
     """Convierte texto en una lista de números (vector)."""
     try:
-        # Genera los números directamente en tu servidor/PC
         embedding = model.encode(text_input)
         return embedding.tolist()
     except Exception as e:

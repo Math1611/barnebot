@@ -1,14 +1,17 @@
 import requests
 import os
 
-WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
+WA_TOKEN = os.getenv("WA_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 
-# 1. Función para mensajes de texto normales
 def send_whatsapp_message(to, message):
+
+    if len(message) > 4000:
+        message = message[:3997] + "..."
+
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
     headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Authorization": f"Bearer {WA_TOKEN}",
         "Content-Type": "application/json"
     }
 
@@ -24,7 +27,6 @@ def send_whatsapp_message(to, message):
     response = requests.post(url, headers=headers, json=payload)
     return response.json()
 
-# 2. NUEVA: Función para mensajes con BOTONES (Interactivos)
 def send_interactive_whatsapp_message(to, payload):
     """
     Esta función envía el JSON complejo que definimos en flow.py 
@@ -32,11 +34,10 @@ def send_interactive_whatsapp_message(to, payload):
     """
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
     headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Authorization": f"Bearer {WA_TOKEN}",
         "Content-Type": "application/json"
     }
 
-    # Aseguramos que el destinatario esté en el payload
     payload["to"] = to
 
     response = requests.post(url, headers=headers, json=payload)

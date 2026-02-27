@@ -10,5 +10,4 @@ class Document(Base):
     content = Column(Text, nullable=False)
     url = Column(String, nullable=True)
     category = Column(String, nullable=True)
-    # Cambiamos Text por Vector con la dimensión de Gemini (768)
     embedding = Column(Vector(384), nullable=False)

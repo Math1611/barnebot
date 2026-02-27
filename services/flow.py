@@ -85,7 +85,7 @@ async def handle_main_menu(db, user, phone, text):
         query = keyword_map[text]
         ai_response = await rag_handler.process_query(db, query, user.language)
         return await send_and_store(db, phone, ai_response)
-
+    
     menu_content = main_menu_en() if user.language == "en" else main_menu()
     return await send_and_store(db, phone, menu_content)
 
