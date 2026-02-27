@@ -49,13 +49,16 @@ async def webhook(request: Request):
     return {"status": "ok"}
 
 def get_message_text(message: dict) -> str:
-    """Extrae el texto sin importar si es mensaje directo o respuesta a botón."""
+    """Extrae el ID si es un botón (para lógica) o el texto si es mensaje directo."""
     if "text" in message:
         return message["text"]["body"]
+    
     if "interactive" in message:
         interactive = message["interactive"]
+        # Priorizamos el ID del botón para el ruteo en flow.py
         if "button_reply" in interactive:
-            return interactive["button_reply"]["title"] # Usar title para el RAG
+            return interactive["button_reply"]["id"]  # Cambiado: devuelve 'lang_es' o 'lang_en'
         if "list_reply" in interactive:
-            return interactive["list_reply"]["title"]
+            return interactive["list_reply"]["id"]
+            
     return "mensaje_no_identificado"

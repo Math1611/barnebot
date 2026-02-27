@@ -15,19 +15,16 @@ def generate_embedding(text_input: str):
         print(f"❌ Error al generar embedding: {e}")
         return None
 
-def search_vector_database(db, query_text, category=None, threshold=0.2, top_k=3):
+def search_vector_database(db, query_text, category=None, threshold=0.28, top_k=3):
     """Busca en Postgres usando similitud de coseno."""
     try:
-        # 2. Ahora sí, llamamos a la función que definimos arriba
         query_vector = generate_embedding(query_text)
         
         if not query_vector:
             return []
 
-        # Convertimos el vector a un string que Postgres entienda
         vector_str = f"[{','.join(map(str, query_vector))}]"
 
-        # SQL limpio y seguro
         query_sql = text("""
             SELECT title, content, url, category, 
                    (1 - (embedding <=> :qv)) as similarity
@@ -43,7 +40,6 @@ def search_vector_database(db, query_text, category=None, threshold=0.2, top_k=3
             "k": top_k
         }).fetchall()
 
-        # Debug para ver en la terminal qué está pasando
         if not results:
             print(f"🔍 Busqué '{query_text}' pero no superó el threshold de {threshold}")
         for r in results:
