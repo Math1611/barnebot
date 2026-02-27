@@ -13,7 +13,7 @@ def generate_embedding(text_input: str):
         print(f"❌ Error al generar embedding: {e}")
         return None
 
-def search_vector_database(db, query_text, category=None, threshold=0.28, top_k=3):
+def search_vector_database(db, query_text, category=None, threshold=0.35, top_k=3):
     """Busca en Postgres usando similitud de coseno."""
     try:
         query_vector = generate_embedding(query_text)

@@ -69,7 +69,7 @@ async def send_language_selection(phone):
     send_interactive_whatsapp_message(phone, data)
 
 # ======================================================
-# STATE HANDLERS (Simplificados)
+# STATE HANDLERS 
 # ======================================================
 
 async def handle_main_menu(db, user, phone, text):
